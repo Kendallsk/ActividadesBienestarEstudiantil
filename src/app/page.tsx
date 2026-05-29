@@ -149,6 +149,27 @@ const PlayIcon = () => (
 );
 
 // ─── ActivityWrapper ──────────────────────────────────────────────────────────
+const getActivityBaseUrl = () => {
+  const configuredUrl = process.env.NEXT_PUBLIC_ACTIVITY_BASE_URL?.trim();
+
+  if (configuredUrl) {
+    return configuredUrl.replace(/\/+$/, "");
+  }
+
+  const { origin, protocol, hostname } = window.location;
+  const vercelDeploymentMatch = hostname.match(
+    /^(.+)-[a-z0-9]+-[a-z0-9]+-projects\.vercel\.app$/i
+  );
+
+  if (vercelDeploymentMatch?.[1]) {
+    return `${protocol}//${vercelDeploymentMatch[1]}.vercel.app`;
+  }
+
+  return origin;
+};
+
+const getEmbedUrl = (slug: string) => `${getActivityBaseUrl()}/embed/${slug}`;
+
 type Phase = 'idle' | 'intro' | 'countdown' | 'playing';
 
 function ActivityWrapper({
@@ -191,7 +212,7 @@ function ActivityWrapper({
 
   const handleExportLink = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const url = `${window.location.origin}/embed/${slug}`;
+    const url = getEmbedUrl(slug);
     navigator.clipboard.writeText(url);
     alert('Enlace copiado al portapapeles:\n' + url);
     setShowExportMenu(false);
@@ -200,7 +221,7 @@ function ActivityWrapper({
   const handleExportZip = async (e: React.MouseEvent) => {
     e.stopPropagation();
     const zip = new JSZip();
-    const url = `${window.location.origin}/embed/${slug}`;
+    const url = getEmbedUrl(slug);
 
     // manifest.json — archivo clave para que el otro proyecto lea los datos sin parsear HTML
     const manifest = {
