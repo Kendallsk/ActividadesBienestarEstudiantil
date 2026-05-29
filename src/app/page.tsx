@@ -39,14 +39,15 @@ const ACTIVITY_INFO: Record<string, { emoji: string; description: string; steps:
     ],
   },
   'rollercoaster-breathe': {
-    emoji: '🎢',
-    description: 'Usa la metáfora de una montaña rusa para explorar tu respiración: sube con la inhalación y baja suavemente con la exhalación.',
-    steps: [
-      'Imagina que estás en una montaña rusa muy suave y tranquila.',
-      'Cuando el vagón suba, inhala con fuerza.',
-      'Cuando el vagón baje, exhala lentamente soltando toda la tensión.',
-      'Deja que tu cuerpo se relaje con cada bajada.',
-    ],
+     emoji: "🕯️",
+     description: "Usa la visualización de una vela para practicar tu respiración: inhala para mantenerla encendida y exhala suavemente como si soplaras para apagarla.",
+  steps: [
+    "Siéntate cómodo y relájate.",
+    "Inhala profundamente por la nariz durante 5 segundos imaginando que la vela se mantiene encendida.",
+    "Exhala suavemente por la boca durante 5 segundos como si soplaras la vela con cuidado.",
+    "Observa cómo la llama se mueve con tu respiración.",
+    "Repite el ciclo 5 veces manteniendo la calma.",
+  ],
   },
   'rollercoaster-zen': {
     emoji: '🧘',
@@ -504,7 +505,7 @@ export default function Home() {
               <>
                 <ActivityWrapper title="Respiración Guiada" slug="respiracion-guia" category="Respiración"><RespiracionGuia /></ActivityWrapper>
                 <ActivityWrapper title="Respiración Montaña" slug="respiracion-montana" category="Respiración"><RespiracionMontana /></ActivityWrapper>
-                <ActivityWrapper title="Rollercoaster Breathe" slug="rollercoaster-breathe" category="Respiración"><RollercoasterBreathe /></ActivityWrapper>
+                <ActivityWrapper title="Vela Breathe" slug="rollercoaster-breathe" category="Respiración"><RollercoasterBreathe /></ActivityWrapper>
                 <ActivityWrapper title="Rollercoaster Zen" slug="rollercoaster-zen" category="Respiración"><RollercoasterZen /></ActivityWrapper>
               </>
             )}

@@ -31,16 +31,18 @@ export const ACTIVITY_INFO: Record<string, ActivityInfo> = {
     ],
   },
   "rollercoaster-breathe": {
-    title: "Rollercoaster Breathe",
-    emoji: "🎢",
-    description:
-      "Usa la metafora de una montana rusa para explorar tu respiracion: sube con la inhalacion y baja suavemente con la exhalacion.",
-    steps: [
-      "Imagina que estas en una montana rusa muy suave y tranquila.",
-      "Cuando el vagon suba, inhala con fuerza.",
-      "Cuando el vagon baje, exhala lentamente soltando toda la tension.",
-      "Deja que tu cuerpo se relaje con cada bajada.",
-    ],
+   title: "Sopla la Vela",
+  emoji: "🕯️",
+  description:
+    "Usa la visualización de una vela para practicar tu respiración: inhala para mantenerla encendida y exhala suavemente como si soplaras para apagarla.",
+  steps: [
+    "Siéntate cómodo y relájate.",
+    "Inhala profundamente por la nariz durante 5 segundos imaginando que la vela se mantiene encendida.",
+    "Exhala suavemente por la boca durante 5 segundos como si soplaras la vela con cuidado.",
+    "Observa cómo la llama se mueve con tu respiración.",
+    "Repite el ciclo 5 veces manteniendo la calma.",
+  ],
+
   },
   "rollercoaster-zen": {
     title: "Rollercoaster Zen",
