@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { notifyActivityReady } from "../../lib/activity-events";
 
 type Globo = {
   id: number;
@@ -19,16 +20,17 @@ type Particula = {
   distance: number;
 };
 
+const EMOJIS = ["💙", "🌈", "✨", "🫧"];
+
 export default function GlobosAntiestres() {
   const [globos, setGlobos] = useState<Globo[]>([]);
   const [particulas, setParticulas] = useState<Particula[]>([]);
   const [activo, setActivo] = useState(true);
   const [score, setScore] = useState(0);
+  const notifiedRef = useRef(false);
 
   const WIDTH = 420;
   const HEIGHT = 500;
-
-  const emojis = ["💙", "🌈", "✨", "🫧"];
 
   // URL DE FONDO
   const backgroundImage =
@@ -46,7 +48,7 @@ export default function GlobosAntiestres() {
           x: Math.random() * (WIDTH - 80),
           y: HEIGHT,
           size: Math.random() * 25 + 55,
-          emoji: emojis[Math.floor(Math.random() * emojis.length)],
+          emoji: EMOJIS[Math.floor(Math.random() * EMOJIS.length)],
         },
       ]);
     }, 800);
@@ -90,7 +92,19 @@ export default function GlobosAntiestres() {
     audio.play().catch(() => { });
 
     // SCORE
-    setScore((s) => s + 1);
+    setScore((s) => {
+      const next = s + 1;
+      if (next >= 5 && !notifiedRef.current) {
+        notifiedRef.current = true;
+        notifyActivityReady({
+          reason: "globos_reventados",
+          datos: {
+            globos_reventados: next,
+          },
+        });
+      }
+      return next;
+    });
 
     // ELIMINAR GLOBO
     setGlobos((prev) => prev.filter((g) => g.id !== globo.id));

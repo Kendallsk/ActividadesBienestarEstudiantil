@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useEffect, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
+import { notifyActivityReady } from "../../lib/activity-events";
 
 const TIEMPOS = { INHALAR: 5, EXHALAR: 6 }; // Subida más rápida, bajada más lenta y relajante
 const CICLOS_REQUERIDOS = 5;
@@ -11,10 +12,13 @@ export default function RollercoasterBreathe() {
   const [completada, setCompletada] = useState(false);
   const [progreso, setProgreso] = useState(0);
 
-  const tiempoInicioRef = useRef(Date.now());
+  const tiempoInicioRef = useRef(0);
 
   useEffect(() => {
     if (completada) return;
+    if (tiempoInicioRef.current === 0) {
+      tiempoInicioRef.current = Date.now();
+    }
 
     const interval = setInterval(() => {
       const transcurrido = (Date.now() - tiempoInicioRef.current) / 1000;
@@ -29,6 +33,12 @@ export default function RollercoasterBreathe() {
 
       if (nuevosCompletados >= CICLOS_REQUERIDOS) {
         setCompletada(true);
+        notifyActivityReady({
+          reason: "ciclos_respiracion_completados",
+          datos: {
+            ciclos_completados: CICLOS_REQUERIDOS,
+          },
+        });
       }
 
       // Progreso visual (0-100)

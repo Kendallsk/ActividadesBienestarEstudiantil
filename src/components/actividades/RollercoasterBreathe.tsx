@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { notifyActivityReady } from "../../lib/activity-events";
 
 const TIEMPOS = { INHALAR: 5, EXHALAR: 5 };
 const CICLOS_REQUERIDOS = 5;
@@ -11,10 +12,18 @@ export default function SoplarVela() {
   const [completada, setCompletada] = useState(false);
   const [progreso, setProgreso] = useState(0);
 
-  const tiempoInicioRef = useRef(Date.now());
+  const tiempoInicioRef = useRef(0);
+  const particulasViento = Array.from({ length: 14 }, (_, i) => ({
+    id: i,
+    x: 45 + ((i * 37) % 110),
+    y: 35 - ((i * 23) % 60),
+  }));
 
   useEffect(() => {
     if (completada) return;
+    if (tiempoInicioRef.current === 0) {
+      tiempoInicioRef.current = Date.now();
+    }
 
     const interval = setInterval(() => {
       const transcurrido = (Date.now() - tiempoInicioRef.current) / 1000;
@@ -42,6 +51,12 @@ export default function SoplarVela() {
 
       if (nuevosCompletados >= CICLOS_REQUERIDOS) {
         setCompletada(true);
+        notifyActivityReady({
+          reason: "ciclos_respiracion_completados",
+          datos: {
+            ciclos_completados: CICLOS_REQUERIDOS,
+          },
+        });
       }
     }, 40); // Más fluido
 
@@ -103,10 +118,10 @@ export default function SoplarVela() {
         <AnimatePresence>
           {esExhalando && !completada && (
             <div className="absolute inset-0 pointer-events-none">
-              {Array.from({ length: 14 }).map((_, i) => (
-                <motion.div key={i} className="absolute w-1 h-1 bg-sky-100 rounded-full"
+              {particulasViento.map((particula, i) => (
+                <motion.div key={particula.id} className="absolute w-1 h-1 bg-sky-100 rounded-full"
                   initial={{ x: 99, y: 102, opacity: 0.85 }}
-                  animate={{ x: 45 + Math.random() * 110, y: 35 - Math.random() * 60, opacity: 0, scale: 0.2 }}
+                  animate={{ x: particula.x, y: particula.y, opacity: 0, scale: 0.2 }}
                   transition={{ duration: 1.15, delay: i * 0.04 }}
                 />
               ))}

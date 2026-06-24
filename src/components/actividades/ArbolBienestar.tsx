@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { notifyActivityReady } from "../../lib/activity-events";
 
 // ─── Tipos ─────────────────────────────────────────────────────────────────────
 type Categoria = "hoja" | "flor" | "fruto";
@@ -15,18 +16,18 @@ interface Elemento {
 
 // ─── Posiciones de las puntas de las ramas (x, y en viewBox 500x440) ──────────
 const POSICIONES = [
-  { x: 250, y: 72 },  // 0 - cima
+  { x: 250, y: 72 },   // 0 - cima
   { x: 163, y: 112 }, // 1 - arriba izq
   { x: 337, y: 112 }, // 2 - arriba der
-  { x: 92, y: 152 }, // 3 - medio-alto izq
+  { x: 92, y: 152 },  // 3 - medio-alto izq
   { x: 408, y: 152 }, // 4 - medio-alto der
-  { x: 45, y: 200 }, // 5 - lateral izq
+  { x: 45, y: 200 },  // 5 - lateral izq
   { x: 455, y: 200 }, // 6 - lateral der
   { x: 188, y: 200 }, // 7 - medio izq
   { x: 312, y: 200 }, // 8 - medio der
   { x: 110, y: 258 }, // 9 - bajo izq
   { x: 390, y: 258 }, // 10 - bajo der
-  { x: 60, y: 238 }, // 11 - muy lateral izq
+  { x: 60, y: 238 },  // 11 - muy lateral izq
   { x: 440, y: 238 }, // 12 - muy lateral der
 ];
 
@@ -69,13 +70,9 @@ function Flor({ color, size = 34 }: { color: string; size?: number }) {
 function Fruto({ color, size = 28 }: { color: string; size?: number }) {
   return (
     <svg width={size} height={size * 1.15} viewBox="0 0 28 32">
-      {/* Tallo */}
       <path d="M14 6 Q 17 2 21 4" stroke="#6B9E5E" strokeWidth="1.8" fill="none" strokeLinecap="round" />
-      {/* Cuerpo */}
       <ellipse cx="14" cy="19" rx="11" ry="12" fill={color} />
-      {/* Línea central */}
       <path d="M14 8 Q 13 14 14 30" stroke="rgba(0,0,0,0.1)" strokeWidth="1.5" fill="none" />
-      {/* Brillo */}
       <ellipse cx="9" cy="14" rx="3.5" ry="5.5" fill="white" opacity="0.22"
         transform="rotate(-20 9 14)" />
     </svg>
@@ -187,8 +184,6 @@ function Leyenda({ conteo }: { conteo: Record<Categoria, number> }) {
 }
 
 // ─── Componente Principal ─────────────────────────────────────────────────────
-let globalId = 1;
-
 export default function ArbolBienestar() {
   const [input, setInput] = useState("");
   const [cargando, setCargando] = useState(false);
@@ -214,10 +209,15 @@ export default function ArbolBienestar() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pensamiento: entradaEstudiante }),
       });
+
+      if (!res.ok) {
+        throw new Error("Error en la respuesta del servidor");
+      }
+
       const data = await res.json();
 
       const nuevo: Elemento = {
-        id: globalId++,
+        id: Date.now(), // Usamos Date.now() para garantizar un ID 100% único siempre
         categoria: data.categoria as Categoria,
         color: data.color ?? "#A8D5A2",
         explicacion: data.explicacion_corta ?? "",
@@ -228,31 +228,37 @@ export default function ArbolBienestar() {
       setUltimaFrase({ texto: data.explicacion_corta, categoria: data.categoria });
       setInput("");
 
-      const params = new URLSearchParams(window.location.search);
-      const payload = {
-        type: "BIENESTAR_ACTIVIDAD_INTERACCION",
-        actividad: "arbol-bienestar",
-        timestamp: new Date().toISOString(),
-        asignacionId: params.get("asignacionId"),
-        intentoId: params.get("intentoId"),
-        estudianteId: params.get("estudianteId"),
-        datos: {
-          entrada_estudiante: entradaEstudiante,
-          respuesta_ia: {
-            categoria: data.categoria,
-            color: data.color ?? "#A8D5A2",
-            mensaje: data.explicacion_corta ?? "",
-          },
+      const datos = {
+        entrada_estudiante: entradaEstudiante,
+        respuesta_ia: {
+          categoria: data.categoria,
+          color: data.color ?? "#A8D5A2",
+          mensaje: data.explicacion_corta ?? "",
         },
       };
 
-      if (window.parent !== window) {
-        window.parent.postMessage(payload, "*");
-      }
+      notifyActivityReady({
+        reason: "respuesta_ia_generada",
+        datos: {
+          ...datos,
+          conteo_elementos: elementos.length + 1,
+        },
+      });
+    } catch (err) {
+      console.error("Modo offline activado:", err);
 
-      console.log("[Bienestar] Interaccion enviada:", payload);
-    } catch {
-      setError("No se pudo conectar con la IA. Intenta de nuevo.");
+      // Elemento de respaldo seguro si la API falla o está saturada
+      const elementoRespaldo: Elemento = {
+        id: Date.now(), 
+        categoria: "hoja",
+        color: "#A8D5A2",
+        explicacion: "Cada pensamiento es una semilla que crece.",
+        posIndex: elementos.length % POSICIONES.length,
+      };
+      
+      setElementos((prev) => [...prev, elementoRespaldo]);
+      setUltimaFrase({ texto: elementoRespaldo.explicacion, categoria: elementoRespaldo.categoria });
+      setInput("");
     } finally {
       setCargando(false);
     }

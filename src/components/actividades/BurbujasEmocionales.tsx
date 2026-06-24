@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Poppins } from "next/font/google";
+import { notifyActivityReady } from "../../lib/activity-events";
 
 // ─────────────────────────────────────────────────────────────
 // FUENTE
@@ -414,14 +415,8 @@ export default function BurbujasEmocionales() {
 
       setInput("");
 
-      const params = new URLSearchParams(window.location.search);
-      const payload = {
-        type: "BIENESTAR_ACTIVIDAD_INTERACCION",
-        actividad: "burbujas-emocionales",
-        timestamp: new Date().toISOString(),
-        asignacionId: params.get("asignacionId"),
-        intentoId: params.get("intentoId"),
-        estudianteId: params.get("estudianteId"),
+      notifyActivityReady({
+        reason: "respuesta_ia_generada",
         datos: {
           entrada_estudiante: entradaEstudiante,
           respuesta_ia: {
@@ -431,13 +426,7 @@ export default function BurbujasEmocionales() {
             tipo_visual: esNegativo ? "negativo" : "positivo",
           },
         },
-      };
-
-      if (window.parent !== window) {
-        window.parent.postMessage(payload, "*");
-      }
-
-      console.log("[Bienestar] Interaccion enviada:", payload);
+      });
     } catch {
       setError(
         "No se pudo conectar con la IA. Inténtalo de nuevo."

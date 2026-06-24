@@ -1,6 +1,7 @@
 "use client";
 import React, { useRef, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { notifyActivityReady } from "../../lib/activity-events";
 
 const RADIO_BORRADOR = 25; 
 
@@ -11,6 +12,7 @@ export default function DespejarNiebla() {
   const [progreso, setProgreso] = useState(0);
   const [completado, setCompletado] = useState(false);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+  const movimientosRef = useRef(0);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -57,7 +59,8 @@ export default function DespejarNiebla() {
       ctx.fill();
       
       // Calcular progreso cada vez que movemos (para que no esté en 0%)
-      if (Math.random() > 0.8) calcularProgreso(); 
+      movimientosRef.current += 1;
+      if (movimientosRef.current % 5 === 0) calcularProgreso();
     }
   };
 
@@ -77,7 +80,15 @@ export default function DespejarNiebla() {
     const currentProg = Math.round((transparent / (pixels.length / 4)) * 100);
     setProgreso(currentProg);
     
-    if (currentProg > 85) setCompletado(true);
+    if (currentProg > 85) {
+      setCompletado(true);
+      notifyActivityReady({
+        reason: "interaccion_visual_completada",
+        datos: {
+          progreso_limpieza: currentProg,
+        },
+      });
+    }
   };
 
   return (
@@ -95,11 +106,12 @@ export default function DespejarNiebla() {
 
       <div className="relative aspect-video bg-[#aee8fd] rounded-2xl border-4 border-slate-800 overflow-hidden cursor-none">
         {/* MONTAÑA DE FONDO (Basada en tu referencia) */}
-        <svg viewBox="0 0 500 281" className="absolute inset-0 w-full h-full">
-          <path d="M 50,281 L 250,50 L 450,281 Z" fill="#4a3728" />
-          <path d="M 250,50 L 210,100 L 290,100 Z" fill="white" />
-          <rect x="0" y="220" width="500" height="61" fill="#7cc04c" />
-        </svg>
+        {/* IMAGEN DE FONDO */}
+        <img
+          src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSkzIhNkC5ftE6DcvGxE3B5Lokl3icib_BsQLMzyoGWHgHDAprH1JzipDiA&s=10"
+          alt="Montaña"
+          className="absolute inset-0 w-full h-full object-cover select-none pointer-events-none"
+        />
 
         {/* CANVAS DE INTERACCIÓN */}
         <canvas

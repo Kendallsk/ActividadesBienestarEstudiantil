@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { notifyActivityReady } from "../../lib/activity-events";
 
 export default function RespiracionCoherente() {
   const segundosFase = 6;
@@ -11,12 +12,15 @@ export default function RespiracionCoherente() {
   const [ciclosCompletados, setCiclosCompletados] = useState(0);
   const [reproduciendo, setReproduciendo] = useState(true);
 
-  const tiempoInicioRef = useRef(Date.now());
-  const ultimoTiempoRef = useRef(Date.now());
+  const tiempoInicioRef = useRef(0);
+  const notifiedRef = useRef(false);
 
   // Timer principal
   useEffect(() => {
     if (!reproduciendo) return;
+    if (tiempoInicioRef.current === 0) {
+      tiempoInicioRef.current = Date.now();
+    }
 
     const intervalo = setInterval(() => {
       const ahora = Date.now();
@@ -28,6 +32,17 @@ export default function RespiracionCoherente() {
       setTiempoActual(nuevoTiempoActual);
       setCiclosCompletados(Math.min(ciclosNuevos, totalCiclos));
 
+      if (ciclosNuevos >= totalCiclos && !notifiedRef.current) {
+        notifiedRef.current = true;
+        setReproduciendo(false);
+        notifyActivityReady({
+          reason: "ciclos_respiracion_completados",
+          datos: {
+            ciclos_completados: totalCiclos,
+          },
+        });
+      }
+
     }, 80); // Actualización fluida
 
     return () => clearInterval(intervalo);
@@ -38,7 +53,7 @@ export default function RespiracionCoherente() {
     if (!reproduciendo) {
       tiempoInicioRef.current = Date.now() - (ciclosCompletados * tiempoTotalCiclo * 1000);
     }
-  }, [reproduciendo]);
+  }, [ciclosCompletados, reproduciendo, tiempoTotalCiclo]);
 
   const esInhalacion = tiempoActual < segundosFase;
 

@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { notifyActivityReady } from "../../lib/activity-events";
 
 type Fase = "INHALAR" | "RETENER" | "EXHALAR" | "DESCANSO";
 
@@ -11,6 +12,7 @@ const TIEMPOS_FASES: Record<Fase, number> = {
   EXHALAR: 7,
   DESCANSO: 4,
 };
+const CICLOS_REQUERIDOS = 3;
 
 // Configuración
 const PROGRESO_FASES: Record<
@@ -66,6 +68,8 @@ const TRACK_PATH =
 
 export default function RollercoasterZen() {
   const [fase, setFase] = useState<Fase>("INHALAR");
+  const [ciclosCompletados, setCiclosCompletados] = useState(0);
+  const [completada, setCompletada] = useState(false);
 
   const [segundos, setSegundos] = useState<number>(
     TIEMPOS_FASES.INHALAR
@@ -80,6 +84,8 @@ export default function RollercoasterZen() {
     ];
 
     const timer = setInterval(() => {
+      if (completada) return;
+
       setSegundos((prev) => {
         if (prev === 1) {
           const actualIndex = fases.indexOf(fase);
@@ -91,6 +97,22 @@ export default function RollercoasterZen() {
 
           setFase(siguienteFase);
 
+          if (fase === "DESCANSO") {
+            setCiclosCompletados((current) => {
+              const next = current + 1;
+              if (next >= CICLOS_REQUERIDOS) {
+                setCompletada(true);
+                notifyActivityReady({
+                  reason: "ciclos_respiracion_completados",
+                  datos: {
+                    ciclos_completados: CICLOS_REQUERIDOS,
+                  },
+                });
+              }
+              return Math.min(next, CICLOS_REQUERIDOS);
+            });
+          }
+
           return TIEMPOS_FASES[siguienteFase];
         }
 
@@ -99,7 +121,7 @@ export default function RollercoasterZen() {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [fase]);
+  }, [fase, completada]);
 
   return (
     <div className="p-8 bg-slate-900 rounded-3xl shadow-2xl border border-slate-700 w-full max-w-xl mx-auto overflow-hidden">
@@ -111,7 +133,7 @@ export default function RollercoasterZen() {
           </h2>
 
           <p className="text-slate-400 text-sm">
-            Respira siguiendo el recorrido
+            Respira siguiendo el recorrido ({ciclosCompletados}/{CICLOS_REQUERIDOS})
           </p>
         </div>
 

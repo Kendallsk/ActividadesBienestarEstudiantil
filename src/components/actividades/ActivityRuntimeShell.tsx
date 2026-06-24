@@ -2,9 +2,13 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ActivityInfo } from "../../lib/activity-info";
+import {
+  ACTIVITY_INTERACTION_EVENT,
+  ACTIVITY_READY_EVENT,
+} from "../../lib/activity-events";
 
-const DURACION_MINIMA_SEGUNDOS = 50;
 type RuntimePhase = "intro" | "countdown" | "playing";
+type CompletionStatus = "pending" | "ready" | "sent";
 
 export default function ActivityRuntimeShell({
   activity,
@@ -16,28 +20,76 @@ export default function ActivityRuntimeShell({
   children: React.ReactNode;
 }) {
   const startedAtRef = useRef<number | null>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const interactionDataRef = useRef<Record<string, any> | null>(null);
+  const interactionDataRef = useRef<Record<string, unknown> | null>(null);
   const [phase, setPhase] = useState<RuntimePhase>("intro");
   const [countdown, setCountdown] = useState(3);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const [completed, setCompleted] = useState(false);
+  const [completionStatus, setCompletionStatus] =
+    useState<CompletionStatus>("pending");
+  const completionStatusRef = useRef<CompletionStatus>("pending");
+  const [attemptKey, setAttemptKey] = useState(0);
 
-  // Listen for interaction data from child activity components
+  const setCompletion = (s: CompletionStatus) => {
+    completionStatusRef.current = s;
+    setCompletionStatus(s);
+  };
+
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       if (detail) {
-        interactionDataRef.current = { ...interactionDataRef.current, ...detail };
-        console.log("[Shell] Datos de interacción recibidos:", interactionDataRef.current);
+        interactionDataRef.current = {
+          ...interactionDataRef.current,
+          ...detail,
+        };
+        console.log("[Shell] Datos de interaccion recibidos:", interactionDataRef.current);
+      }
+
+      // Solo considerar la actividad como lista si ya está en fase de reproducción.
+      if (phase !== "playing") {
+        console.log("[Shell] Ignorando evento de interaccion: actividad no está en 'playing'");
+        return;
+      }
+
+      // Enviar finalización inmediatamente cuando la actividad indica que está lista.
+      if (completionStatusRef.current !== "sent") {
+        finishActivity();
       }
     };
-    window.addEventListener("bienestar-interaccion-data", handler);
-    return () => window.removeEventListener("bienestar-interaccion-data", handler);
-  }, []);
+
+    window.addEventListener(ACTIVITY_INTERACTION_EVENT, handler);
+    return () => window.removeEventListener(ACTIVITY_INTERACTION_EVENT, handler);
+  }, [phase]);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail) {
+        interactionDataRef.current = {
+          ...interactionDataRef.current,
+          ...detail,
+        };
+      }
+
+      // Ignorar señales de "ready" si la actividad no ha comenzado.
+      if (phase !== "playing") {
+        console.log("[Shell] Ignorando evento de ready: actividad no está en 'playing'");
+        return;
+      }
+
+      // Enviar finalización inmediatamente cuando la actividad indica que está lista.
+      if (completionStatusRef.current !== "sent") {
+        finishActivity();
+      }
+    };
+
+    window.addEventListener(ACTIVITY_READY_EVENT, handler);
+    return () => window.removeEventListener(ACTIVITY_READY_EVENT, handler);
+  }, [phase]);
 
   useEffect(() => {
     if (phase !== "playing") return;
+
     startedAtRef.current = Date.now();
     const interval = window.setInterval(() => {
       if (startedAtRef.current === null) return;
@@ -45,10 +97,11 @@ export default function ActivityRuntimeShell({
     }, 1000);
 
     return () => window.clearInterval(interval);
-  }, [phase]);
+  }, [phase, attemptKey]);
 
   useEffect(() => {
     if (phase !== "countdown") return;
+
     const interval = window.setInterval(() => {
       setCountdown((current) => {
         if (current <= 1) {
@@ -72,16 +125,22 @@ export default function ActivityRuntimeShell({
     return new URLSearchParams(window.location.search);
   }, []);
 
-  const remainingSeconds = Math.max(0, DURACION_MINIMA_SEGUNDOS - elapsedSeconds);
-  const canFinish = remainingSeconds === 0 && !completed;
+  const resetAttempt = () => {
+    interactionDataRef.current = null;
+    startedAtRef.current = Date.now();
+    setElapsedSeconds(0);
+    setCompletionStatus("pending");
+    setAttemptKey((current) => current + 1);
+  };
 
-  const finishActivity = () => {
-    if (!canFinish) return;
-
-    // Merge interaction data collected from child activity (e.g. Pensamientos)
+  const buildCompletionPayload = () => {
     const interactionData = interactionDataRef.current ?? {};
+    const datos =
+      typeof interactionData.datos === "object" && interactionData.datos !== null
+        ? (interactionData.datos as Record<string, unknown>)
+        : {};
 
-    const payload = {
+    return {
       type: "BIENESTAR_ACTIVIDAD_COMPLETADA",
       actividad: activity,
       timestamp: new Date().toISOString(),
@@ -90,23 +149,28 @@ export default function ActivityRuntimeShell({
       estudianteId: params.get("estudianteId"),
       duracion_segundos: elapsedSeconds,
       culmino: true,
-      // Include the actual student data from the activity
       ...interactionData,
       datos: {
         resumen: {
-          finalizacion: "manual_despues_de_tiempo_minimo",
+          finalizacion: "actividad_detectada_completa",
         },
-        ...(interactionData.datos ?? {}),
+        ...datos,
       },
     };
+  };
 
+  const finishActivity = () => {
+    if (completionStatusRef.current === "sent") return;
+    const payload = buildCompletionPayload();
     if (window.parent !== window) {
       window.parent.postMessage(payload, "*");
     }
-
     console.log("[Bienestar] Actividad completada:", payload);
-    setCompleted(true);
+    setCompletion("sent");
   };
+
+  // Manual finalization removed: activities must send ready/interaction events
+  // and finalization will be sent automatically when the activity reports ready.
 
   if (phase === "intro") {
     return (
@@ -153,7 +217,7 @@ export default function ActivityRuntimeShell({
               type="button"
               onClick={() => {
                 setCountdown(3);
-                setElapsedSeconds(0);
+                resetAttempt();
                 setPhase("countdown");
               }}
               className="self-end rounded-full bg-[#2A6EBB] px-8 py-3 text-base font-bold text-white shadow-md transition hover:bg-[#1F4E79]"
@@ -191,29 +255,26 @@ export default function ActivityRuntimeShell({
   }
 
   return (
-    <div className="relative w-screen h-screen overflow-hidden bg-white">
-      {children}
-
-      <div className="absolute right-4 bottom-4 z-50 flex items-center gap-3 rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 shadow-xl backdrop-blur">
-        <div className="text-right">
-          <p className="text-xs font-semibold text-slate-500">
-            {completed ? "Actividad finalizada" : "Finalizacion"}
-          </p>
-          <p className="text-sm font-bold text-slate-800">
-            {canFinish || completed
-              ? "Lista para registrar"
-              : `${remainingSeconds}s restantes`}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={finishActivity}
-          disabled={!canFinish}
-          className="rounded-xl bg-[#2A6EBB] px-4 py-2 text-sm font-bold text-white transition disabled:cursor-not-allowed disabled:bg-slate-300"
-        >
-          {completed ? "Enviada" : "Finalizar"}
-        </button>
+    <div className="relative h-screen w-screen overflow-hidden bg-white">
+      <div key={attemptKey} className="flex h-full w-full items-center justify-center p-4">
+        {children}
       </div>
+
+      {/* Finalización ahora se envía automáticamente; mostrar solo un aviso informativo */}
+      {completionStatus !== "pending" && (
+        <div className="absolute inset-x-4 bottom-4 z-50 mx-auto flex max-w-md flex-col gap-3 rounded-2xl border border-emerald-200 bg-white/95 p-4 text-center shadow-2xl backdrop-blur">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-600">
+              Actividad terminada
+            </p>
+            <p className="mt-1 text-sm font-bold text-slate-800">
+              {completionStatus === "sent"
+                ? "La finalización fue enviada al aplicativo principal."
+                : "La actividad finalizó automáticamente."}
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

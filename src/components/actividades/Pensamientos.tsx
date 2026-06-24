@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { notifyActivityReady } from "../../lib/activity-events";
 
 export default function RegistroPensamientosIA() {
     const [situacion, setSituacion] = useState("");
@@ -22,30 +23,78 @@ export default function RegistroPensamientosIA() {
         setEstado("PROCESANDO");
 
         try {
-            const res = await fetch("/api/analizar", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                    pensamiento,
-                    situacion,
-                }),
-            });
+                // Reintentos con backoff exponencial en caso de errores temporales (503, 429, timeouts)
+                // Ajuste: reducir intentos y aumentar timeout porque el backend puede tardar mucho.
+                const maxAttempts = 2;
+                let attempt = 0;
+                let lastError: unknown = null;
 
-            const data = await res.json();
+                while (attempt < maxAttempts) {
+                    attempt += 1;
+                    try {
+                        // Nota: removemos AbortController/timeouts para evitar AbortError
+                        // cuando el backend responde tarde. Confiamos en que el servidor
+                        // terminará la petición; los intentos se hacen de forma secuencial.
+                        const res = await fetch("/api/analizar", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ pensamiento, situacion }),
+                        });
 
-            if (data.error) {
-                throw new Error(data.error);
-            }
+                        if (!res.ok) {
+                            const text = await res.text().catch(() => "");
+                            const errMsg = `IA request failed: ${res.status} ${res.statusText} ${text}`;
+                            const err = new Error(errMsg);
+                            // For 5xx/429 try again, otherwise throw
+                            if (res.status >= 500 || res.status === 429) {
+                                throw err;
+                            }
+                            throw err;
+                        }
 
-            setIaAnalisis(data);
-            setEstado("RESULTADO");
+                        const data = await res.json();
+
+                        if (data.error) throw new Error(data.error);
+
+                        setIaAnalisis(data);
+                        setEstado("RESULTADO");
+                        lastError = null;
+                        break;
+                    } catch (err) {
+                        lastError = err;
+                        const waitMs = 500 * Math.pow(2, attempt - 1); // 500, 1000, 2000
+                        console.warn(`[Pensamientos] Intento ${attempt} falló:`, err);
+                        if (attempt < maxAttempts) {
+                            console.warn(`[Pensamientos] Esperando ${waitMs}ms antes del siguiente intento.`);
+                            await new Promise((r) => setTimeout(r, waitMs));
+                        }
+                    }
+                }
+
+                if (lastError) {
+                    throw lastError;
+                }
         } catch (error: unknown) {
-            const message = error instanceof Error ? error.message : "Error desconocido";
-            console.error(message);
-            setEstado("ENTRADA");
-            alert("Error al conectar con la IA");
+                const message = error instanceof Error ? error.message : "Error desconocido";
+                console.error("[Pensamientos] Error al analizar con IA:", message);
+
+                        // Si la IA no responde, ofrecer un fallback local para no bloquear la UX.
+                        const isServiceUnavailable = /(503|Service Unavailable|generativelanguage|high demand|This model is currently experiencing high demand)/i.test(message);
+
+                if (isServiceUnavailable) {
+                    // Respuesta predeterminada que guía al estudiante a reformular
+                    setIaAnalisis({
+                        distorsion: "No se pudo obtener un análisis automático en este momento.",
+                        sugerencia:
+                            "Intenta describir tu pensamiento con más detalle o guarda tu reflexión para revisar más tarde. Puedes reintentar en unos minutos.",
+                    });
+                    setEstado("RESULTADO");
+                    // Notificar al usuario brevemente
+                    alert("Servicio de IA temporalmente saturado. Se ha aplicado una respuesta local sugerida.");
+                } else {
+                    setEstado("ENTRADA");
+                    alert("Error al conectar con la IA. Intenta nuevamente más tarde.");
+                }
         }
     };
 
@@ -59,11 +108,8 @@ export default function RegistroPensamientosIA() {
         setEstado("ENTRADA");
     };
 
-    // Enviar la interaccion a la plataforma mediante postMessage.
     // La finalizacion general la maneja ActivityRuntimeShell.
     const guardarReflexion = () => {
-        const params = new URLSearchParams(window.location.search);
-
         const interactionData = {
             entrada_estudiante: pensamiento,
             respuesta_ia: {
@@ -73,39 +119,16 @@ export default function RegistroPensamientosIA() {
             },
         };
 
-        // Dispatch custom event so ActivityRuntimeShell includes this data
-        // in the BIENESTAR_ACTIVIDAD_COMPLETADA postMessage
-        window.dispatchEvent(
-            new CustomEvent("bienestar-interaccion-data", {
-                detail: {
-                    pensamiento,
-                    situacion,
-                    respuestaIa: {
-                        distorsion: iaAnalisis.distorsion,
-                        sugerencia: iaAnalisis.sugerencia,
-                    },
-                    datos: interactionData,
-                },
-            })
-        );
-
-        const payload = {
-            type: "BIENESTAR_ACTIVIDAD_INTERACCION",
-            actividad: "pensamientos",
-            timestamp: new Date().toISOString(),
-            asignacionId: params.get("asignacionId"),
-            intentoId: params.get("intentoId"),
-            estudianteId: params.get("estudianteId"),
+        notifyActivityReady({
+            reason: "respuesta_ia_generada",
+            pensamiento,
+            situacion,
+            respuestaIa: {
+                distorsion: iaAnalisis.distorsion,
+                sugerencia: iaAnalisis.sugerencia,
+            },
             datos: interactionData,
-        };
-
-        // Enviar al proyecto padre (la plataforma) si está en un iframe
-        if (window.parent !== window) {
-            window.parent.postMessage(payload, "*");
-        }
-
-        // También lo guardamos en consola para verificar durante desarrollo
-        console.log("[Bienestar] Datos enviados a la plataforma:", payload);
+        });
 
         setEstado("GUARDADO");
     };

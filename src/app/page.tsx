@@ -240,13 +240,16 @@ function ActivityWrapper({
       pasos: info?.steps ?? [],
       steps: info?.steps ?? [],
       finalizacion: {
-        tipo: "manual_despues_de_tiempo_minimo",
-        duracion_minima_segundos: 50,
+        tipo: "detectada_por_actividad_con_confirmacion_usuario",
         countdown_inicio_segundos: 3,
+        notificacion: {
+          mensaje: "Actividad terminada",
+          acciones: ["repetir", "finalizar"],
+        },
         evento: "BIENESTAR_ACTIVIDAD_COMPLETADA",
       },
       eventos: {
-        interaccion: "BIENESTAR_ACTIVIDAD_INTERACCION",
+        actividad_lista: "bienestar-activity-ready",
         completada: "BIENESTAR_ACTIVIDAD_COMPLETADA",
       },
       persistencia_recomendada: {
@@ -273,6 +276,8 @@ function ActivityWrapper({
       ...(info?.steps ?? []).map((step, index) => `${index + 1}. ${step}`),
       "",
       "Antes de ejecutar la actividad se muestra un conteo de 3, 2, 1.",
+      "Cuando la actividad termina, aparece una notificacion con las opciones Repetir o Finalizar.",
+      "Solo al pulsar Finalizar se envia el evento BIENESTAR_ACTIVIDAD_COMPLETADA al aplicativo principal.",
     ].join("\n"));
 
     const htmlContent = `<!DOCTYPE html>

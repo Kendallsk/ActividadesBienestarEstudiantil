@@ -1,6 +1,7 @@
 "use client";
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
+import { notifyActivityReady } from "../../lib/activity-events";
 
 export default function BurbujasAlivio() {
   const [burbujas, setBurbujas] = useState(Array(20).fill(false));
@@ -11,6 +12,15 @@ export default function BurbujasAlivio() {
     const nuevas = [...burbujas];
     nuevas[i] = true;
     setBurbujas(nuevas);
+
+    if (nuevas.every(Boolean)) {
+      notifyActivityReady({
+        reason: "burbujas_reventadas",
+        datos: {
+          burbujas_reventadas: nuevas.length,
+        },
+      });
+    }
 
     // 1. Sonido
     const audio = new Audio('/sounds/pop.mp3');
