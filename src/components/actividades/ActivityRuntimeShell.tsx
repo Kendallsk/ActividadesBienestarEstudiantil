@@ -10,6 +10,41 @@ import {
 type RuntimePhase = "intro" | "countdown" | "playing";
 type CompletionStatus = "pending" | "ready" | "sent";
 
+const getUserRoleFromContext = () => {
+  if (typeof window === "undefined") return null;
+
+  const searchParams = new URLSearchParams(window.location.search);
+  const searchRole = [
+    searchParams.get("rol"),
+    searchParams.get("role"),
+    searchParams.get("tipoUsuario"),
+    searchParams.get("tipo"),
+    searchParams.get("userType"),
+  ].find(Boolean);
+
+  if (searchRole) {
+    return searchRole.trim().toUpperCase();
+  }
+
+  const storageCandidates = [
+    window.localStorage.getItem("userRole"),
+    window.localStorage.getItem("rol"),
+    window.localStorage.getItem("role"),
+    window.localStorage.getItem("tipoUsuario"),
+    window.localStorage.getItem("tipo"),
+    window.localStorage.getItem("userType"),
+    window.sessionStorage.getItem("userRole"),
+    window.sessionStorage.getItem("rol"),
+    window.sessionStorage.getItem("role"),
+    window.sessionStorage.getItem("tipoUsuario"),
+    window.sessionStorage.getItem("tipo"),
+    window.sessionStorage.getItem("userType"),
+  ];
+
+  const storedRole = storageCandidates.find((value): value is string => Boolean(value));
+  return storedRole?.trim().toUpperCase() ?? null;
+};
+
 export default function ActivityRuntimeShell({
   activity,
   info,
@@ -28,6 +63,9 @@ export default function ActivityRuntimeShell({
     useState<CompletionStatus>("pending");
   const completionStatusRef = useRef<CompletionStatus>("pending");
   const [attemptKey, setAttemptKey] = useState(0);
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [showConsentModal, setShowConsentModal] = useState(false);
+  const [consentAccepted, setConsentAccepted] = useState(false);
 
   const setCompletion = (s: CompletionStatus) => {
     completionStatusRef.current = s;
@@ -117,6 +155,10 @@ export default function ActivityRuntimeShell({
     return () => window.clearInterval(interval);
   }, [phase]);
 
+  useEffect(() => {
+    setUserRole(getUserRoleFromContext());
+  }, []);
+
   const params = useMemo(() => {
     if (typeof window === "undefined") {
       return new URLSearchParams();
@@ -124,6 +166,10 @@ export default function ActivityRuntimeShell({
 
     return new URLSearchParams(window.location.search);
   }, []);
+
+  const isPatient = userRole === "PACIENTE";
+  const requiresConsent = isPatient && ["pensamientos", "burbujas-emocionales", "arbol-bienestar"].includes(activity);
+  const showCompletionToast = isPatient && completionStatus !== "pending";
 
   const resetAttempt = () => {
     interactionDataRef.current = null;
@@ -169,12 +215,66 @@ export default function ActivityRuntimeShell({
     setCompletion("sent");
   };
 
+  const beginActivity = () => {
+    setCountdown(3);
+    resetAttempt();
+    setPhase("countdown");
+  };
+
+  const handleStartButton = () => {
+    if (requiresConsent && !consentAccepted) {
+      setShowConsentModal(true);
+      return;
+    }
+
+    beginActivity();
+  };
+
+  const acceptConsent = () => {
+    setConsentAccepted(true);
+    setShowConsentModal(false);
+    beginActivity();
+  };
+
   // Manual finalization removed: activities must send ready/interaction events
   // and finalization will be sent automatically when the activity reports ready.
 
-  if (phase === "intro") {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[#ADD8E6] p-6">
+  return (
+    <>
+      {showConsentModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/45 p-4">
+          <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#2A6EBB]">
+              Consentimiento de datos
+            </p>
+            <h2 className="mt-2 text-xl font-black text-slate-800">
+              ¿Aceptas guardar tus respuestas?
+            </h2>
+            <p className="mt-3 text-sm leading-relaxed text-slate-600">
+              Al continuar, aceptas que tus respuestas y registros generados en esta actividad sean guardados para el seguimiento de tu bienestar.
+            </p>
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setShowConsentModal(false)}
+                className="rounded-full border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={acceptConsent}
+                className="rounded-full bg-[#2A6EBB] px-5 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-[#1F4E79]"
+              >
+                Aceptar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {phase === "intro" ? (
+        <div className="flex min-h-screen items-center justify-center bg-[#ADD8E6] p-6">
         <div className="w-full max-w-3xl overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-xl">
           <div className="flex items-center gap-4 bg-[#2A6EBB] px-8 py-6">
             <span className="text-5xl">{info?.emoji ?? "🎯"}</span>
@@ -215,24 +315,16 @@ export default function ActivityRuntimeShell({
 
             <button
               type="button"
-              onClick={() => {
-                setCountdown(3);
-                resetAttempt();
-                setPhase("countdown");
-              }}
+              onClick={handleStartButton}
               className="self-end rounded-full bg-[#2A6EBB] px-8 py-3 text-base font-bold text-white shadow-md transition hover:bg-[#1F4E79]"
             >
               Comenzar actividad
             </button>
           </div>
         </div>
-      </div>
-    );
-  }
-
-  if (phase === "countdown") {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#ADD8E6]">
+        </div>
+      ) : phase === "countdown" ? (
+        <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#ADD8E6]">
         <p className="text-lg font-bold text-[#1F4E79]">
           Preparandote para comenzar...
         </p>
@@ -250,18 +342,15 @@ export default function ActivityRuntimeShell({
             100% { transform: scale(1); opacity: 1; }
           }
         `}</style>
-      </div>
-    );
-  }
-
-  return (
-    <div className="relative h-screen w-screen overflow-hidden bg-white">
+        </div>
+      ) : (
+        <div className="relative h-screen w-screen overflow-hidden bg-white">
       <div key={attemptKey} className="flex h-full w-full items-center justify-center p-4">
         {children}
       </div>
 
-      {/* Finalización ahora se envía automáticamente; mostrar solo un aviso informativo */}
-      {completionStatus !== "pending" && (
+      {/* Finalización ahora se envía automáticamente; mostrar solo un aviso informativo para pacientes */}
+      {showCompletionToast && (
         <div className="absolute inset-x-4 bottom-4 z-50 mx-auto flex max-w-md flex-col gap-3 rounded-2xl border border-emerald-200 bg-white/95 p-4 text-center shadow-2xl backdrop-blur">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-emerald-600">
@@ -269,12 +358,14 @@ export default function ActivityRuntimeShell({
             </p>
             <p className="mt-1 text-sm font-bold text-slate-800">
               {completionStatus === "sent"
-                ? "La finalización fue enviada al aplicativo principal."
+                ? "La finalización fue enviada al aplicativo."
                 : "La actividad finalizó automáticamente."}
             </p>
           </div>
         </div>
       )}
-    </div>
+        </div>
+      )}
+    </>
   );
 }

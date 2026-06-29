@@ -168,7 +168,59 @@ const getActivityBaseUrl = () => {
   return origin;
 };
 
-const getEmbedUrl = (slug: string) => `${getActivityBaseUrl()}/embed/${slug}`;
+const getUserRoleFromContext = () => {
+  if (typeof window === 'undefined') return null;
+
+  const searchParams = new URLSearchParams(window.location.search);
+  const searchRole = [
+    searchParams.get('rol'),
+    searchParams.get('role'),
+    searchParams.get('tipoUsuario'),
+    searchParams.get('tipo'),
+    searchParams.get('userType'),
+  ].find(Boolean);
+
+  if (searchRole) {
+    return searchRole.trim().toUpperCase();
+  }
+
+  const storageCandidates = [
+    window.localStorage.getItem('userRole'),
+    window.localStorage.getItem('rol'),
+    window.localStorage.getItem('role'),
+    window.localStorage.getItem('tipoUsuario'),
+    window.localStorage.getItem('tipo'),
+    window.localStorage.getItem('userType'),
+    window.sessionStorage.getItem('userRole'),
+    window.sessionStorage.getItem('rol'),
+    window.sessionStorage.getItem('role'),
+    window.sessionStorage.getItem('tipoUsuario'),
+    window.sessionStorage.getItem('tipo'),
+    window.sessionStorage.getItem('userType'),
+  ];
+
+  const storedRole = storageCandidates.find((value): value is string => Boolean(value));
+  return storedRole?.trim().toUpperCase() ?? null;
+};
+
+const getEmbedUrl = (slug: string) => {
+  const baseUrl = getActivityBaseUrl();
+  const url = new URL(`${baseUrl}/embed/${slug}`);
+
+  if (typeof window !== 'undefined') {
+    const currentParams = new URLSearchParams(window.location.search);
+    currentParams.forEach((value, key) => {
+      url.searchParams.set(key, value);
+    });
+
+    const role = getUserRoleFromContext();
+    if (role) {
+      url.searchParams.set('rol', role);
+    }
+  }
+
+  return url.toString();
+};
 
 type Phase = 'idle' | 'intro' | 'countdown' | 'playing';
 
@@ -232,6 +284,7 @@ function ActivityWrapper({
       categoria: category,
       category: category,
       embed_url: url,
+      rol: getUserRoleFromContext() ?? 'PACIENTE',
       emoji: info?.emoji ?? "🎯",
       descripcion: info?.description ?? "",
       description: info?.description ?? "",
